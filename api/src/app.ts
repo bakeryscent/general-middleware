@@ -56,10 +56,18 @@ export const createApp = () =>
             reason: logDetails,
           });
 
-          return jsonError(error.status, {
+          const response = jsonError(error.status, {
             message: error.message,
             reason: logDetails,
           });
+          
+          // Log the error response we are sending to the client
+          console.info("Sending DeviceCheck error response", {
+             status: response.status,
+             headers: Object.fromEntries(response.headers.entries())
+          });
+
+          return response;
         }
 
         throw error;

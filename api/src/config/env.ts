@@ -39,7 +39,9 @@ export const env = {
     privateKey:
       trimOrUndefined(Bun.env.DEVICECHECK_PRIVATE_KEY) ??
       readFileFromPath(trimOrUndefined(Bun.env.DEVICECHECK_PRIVATE_KEY_FILE)),
-    baseUrl: sanitizeUrl(Bun.env.DEVICECHECK_BASE_URL, "https://api.devicecheck.apple.com/v1"),
+    baseUrl: (Bun.env.NODE_ENV ?? "development") === "production"
+      ? "https://api.devicecheck.apple.com/v1"
+      : "https://api.development.devicecheck.apple.com/v1",
     timeoutMs: toNumber(Bun.env.DEVICECHECK_TIMEOUT_MS, 4000),
   },
   providers: {
