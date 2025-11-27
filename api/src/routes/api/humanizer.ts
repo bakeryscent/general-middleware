@@ -96,12 +96,12 @@ const callOpenAi = async (text: string, template: string, action: HumanizerActio
     const result = await openAiClient.proxy({
         model: MODEL,
         payload: {
-            messages: [
+            input: [
             {
                 role: "user",
                 content: [
                 {
-                    type: "text",
+                    type: "input_text",
                     text: renderPrompt(template, text),
                 },
                 ],
