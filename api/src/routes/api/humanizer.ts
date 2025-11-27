@@ -5,12 +5,14 @@ import type { ProxyResult } from "../../clients/proxy-client";
 import { recordSpanException } from "../../telemetry/span";
 
 const MODEL = "gpt-5-nano";
+
 const DETECT_PROMPT = `Analyze the following text and determine the probability that it was written by an AI.
 Return ONLY a number between 0 and 100 representing the percentage probability.
 Do not include any other text or symbols.
 
 Text:
 {{TEXT}}`;
+
 const HUMANIZE_PROMPT = `Rewrite the following text to make it sound more human, natural, and engaging.
 IMPORTANT: Return ONLY the rewritten text. Do not include any conversational filler like "Here is the text" or "Alright".
 
@@ -32,28 +34,41 @@ const ensureOpenAiReady = () => {
   return undefined;
 };
 
-const renderPrompt = (template: string, text: string) => template.replace("{{TEXT}}", text);
+const renderPrompt = (template: string, text: string) =>
+  template.replace("{{TEXT}}", text);
 
+/**
+ * Extracts text from Responses API or fallback Chat response.
+ */
 const extractText = (result: ProxyResult) => {
   const body = result.body as Record<string, unknown> | string | undefined;
 
+  // Sometimes proxy returns raw text
   if (typeof body === "string") {
     return body.trim();
   }
 
   if (body && typeof body === "object") {
+    //
+    // Responses API format
+    //
     const fromOutput = (body as any)?.output;
 
     if (Array.isArray(fromOutput)) {
       const firstContent = fromOutput[0]?.content;
       if (Array.isArray(firstContent)) {
-        const textChunk = firstContent.find((chunk: any) => typeof chunk?.text === "string");
+        const textChunk = firstContent.find(
+          (chunk: any) => typeof chunk?.text === "string"
+        );
         if (textChunk?.text) {
           return String(textChunk.text).trim();
         }
       }
     }
 
+    //
+    // Legacy Chat format (fallback)
+    //
     const choices = (body as any)?.choices;
     if (Array.isArray(choices)) {
       const choice = choices[0];
@@ -64,7 +79,9 @@ const extractText = (result: ProxyResult) => {
       }
 
       if (Array.isArray(messageContent)) {
-        const part = messageContent.find((piece: any) => typeof piece?.text === "string");
+        const part = messageContent.find(
+          (piece: any) => typeof piece?.text === "string"
+        );
         if (part?.text) {
           return String(part.text).trim();
         }
@@ -77,11 +94,16 @@ const extractText = (result: ProxyResult) => {
 
 type HumanizerAction = "detect" | "humanize";
 
-type OpenAiCallResult =
-  | { value: string }
-  | { error: Response };
+type OpenAiCallResult = { value: string } | { error: Response };
 
-const callOpenAi = async (text: string, template: string, action: HumanizerAction): Promise<OpenAiCallResult> => {
+/**
+ * FINAL: Calls OpenAI Responses API (NOT chat).
+ */
+const callOpenAi = async (
+  text: string,
+  template: string,
+  action: HumanizerAction
+): Promise<OpenAiCallResult> => {
   const configError = ensureOpenAiReady();
   if (configError) {
     return { error: configError };
@@ -94,20 +116,10 @@ const callOpenAi = async (text: string, template: string, action: HumanizerActio
 
   try {
     const result = await openAiClient.proxy({
-        model: MODEL,
-        payload: {
-            input: [
-            {
-                role: "user",
-                content: [
-                {
-                    type: "input_text",
-                    text: renderPrompt(template, text),
-                },
-                ],
-            },
-            ],
-        },
+      model: MODEL,
+      payload: {
+        input: renderPrompt(template, text),
+      },
     });
 
     if (!result.ok) {
@@ -157,7 +169,12 @@ const callOpenAi = async (text: string, template: string, action: HumanizerActio
   }
 };
 
-const parseProbability = (value: string): { value: number } | { error: Response } => {
+/**
+ * Parses a probability returned by detect endpoint.
+ */
+const parseProbability = (
+  value: string
+): { value: number } | { error: Response } => {
   const match = value.trim().match(/-?\d+(?:\.\d+)?/);
   const numeric = match ? Number(match[0]) : Number.NaN;
 
@@ -165,6 +182,7 @@ const parseProbability = (value: string): { value: number } | { error: Response 
     recordSpanException("OpenAI did not return a numeric probability", {
       "humanizer.output": value,
     });
+
     return {
       error: jsonError(502, {
         message: "OpenAI did not return a numeric probability",
@@ -178,12 +196,22 @@ const parseProbability = (value: string): { value: number } | { error: Response 
   };
 };
 
+/**
+ * Routes
+ */
 export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
   .post(
     "/detect",
     async ({ body }) => {
-      console.info("humanizer.detect.request", { length: body.text.length });
-      const result = await callOpenAi(body.text, DETECT_PROMPT, "detect");
+      console.info("humanizer.detect.request", {
+        length: body.text.length,
+      });
+
+      const result = await callOpenAi(
+        body.text,
+        DETECT_PROMPT,
+        "detect"
+      );
 
       if ("error" in result) {
         return result.error;
@@ -204,8 +232,15 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
   .post(
     "/humanize",
     async ({ body }) => {
-      console.info("humanizer.humanize.request", { length: body.text.length });
-      const result = await callOpenAi(body.text, HUMANIZE_PROMPT, "humanize");
+      console.info("humanizer.humanize.request", {
+        length: body.text.length,
+      });
+
+      const result = await callOpenAi(
+        body.text,
+        HUMANIZE_PROMPT,
+        "humanize"
+      );
 
       if ("error" in result) {
         return result.error;
