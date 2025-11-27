@@ -62,6 +62,33 @@ curl -X POST http://localhost:3000/api/echo \
 
 If you need to exempt infrastructure probes (eg. uptime checks) from DeviceCheck, place them behind a small shim service that can attach a valid token, or add an allowlist in code before the DeviceCheck guard.
 
+### Troubleshooting DeviceCheck failures
+
+When the server rejects a token it responds with structured JSON:
+
+```json
+{
+	"message": "Invalid DeviceCheck token",
+	"reason": "{\"error\":\"Invalid device token\"}"
+}
+```
+
+- **`message`** is a human summary (`Missing DeviceCheck token`, `DeviceCheck validation failed`, etc.).
+- **`reason`** is the raw body returned by Apple; it can be JSON or plain text. Log this client-side to understand whether the token was reused, expired, or malformed.
+
+Server visibility:
+
+1. **Logs** – each rejection prints `DeviceCheck rejected` with `path`, `status`, and `reason` so container logs show the exact Apple error.
+2. **Axiom traces** – the HTTP span carries `devicecheck.status`, `devicecheck.reason`, and `devicecheck.path`. Filter `status.code == "ERROR"` to see failures live.
+3. **Span exceptions** – every failure records an exception event; in Axiom open the trace and inspect the error event for the same details.
+
+Common causes:
+
+- `Invalid device token` – token reused or generated without entitlement.
+- `Missing DeviceCheck token` – header absent (ensure keyboards send `x-devicecheck-token`).
+- `DeviceCheck validation timed out` – Apple endpoint unreachable; retry with exponential backoff.
+- `DeviceCheck validation request failed` – network error between server and Apple; check upstream connectivity.
+
 ## Axiom telemetry
 
 Set `AXIOM_TOKEN` (ingest scope) and `AXIOM_DATASET` to push OpenTelemetry spans straight into Axiom. When those env vars are present the server wires an OTLP HTTP exporter and automatically sends:

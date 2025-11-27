@@ -2,7 +2,7 @@ import { SignJWT, importPKCS8, type KeyLike } from "jose";
 import { env, type DeviceCheckEnvConfig } from "../config/env";
 import { recordSpanException } from "../telemetry/span";
 
-const DEVICECHECK_AUDIENCE = "devicecheck.apple.com";
+const DEVICECHECK_AUDIENCE = "https://devicecheck.apple.com";
 const AUTH_TOKEN_TTL_SECONDS = 20 * 60;
 const AUTH_TOKEN_REFRESH_BUFFER_MS = 30_000;
 
@@ -57,6 +57,11 @@ class DeviceCheckClient {
   constructor(private readonly config: DeviceCheckEnvConfig) {
     assertDeviceCheckConfig(config);
     this.normalizedPrivateKey = normalizePrivateKey(config.privateKey!);
+    console.info("DeviceCheck initialized", {
+      baseUrl: config.baseUrl,
+      keyId: config.keyId,
+      teamId: config.teamId,
+    });
   }
 
   private async getSigningKey(): Promise<KeyLike> {
@@ -94,7 +99,9 @@ class DeviceCheckClient {
   }
 
   private async post(path: string, body: RequestInit["body"], signal: AbortSignal) {
-    const response = await fetch(buildDeviceCheckUrl(this.config.baseUrl, path), {
+    const url = buildDeviceCheckUrl(this.config.baseUrl, path);
+    const startedAt = Date.now();
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${await this.getAuthorizationToken()}`,
@@ -102,6 +109,14 @@ class DeviceCheckClient {
       },
       body,
       signal,
+    });
+
+    const durationMs = Date.now() - startedAt;
+
+    console.info("DeviceCheck.request", {
+      path: url,
+      status: response.status,
+      durationMs,
     });
 
     return response;
@@ -120,11 +135,12 @@ class DeviceCheckClient {
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
     try {
+      const transactionId = crypto.randomUUID();
       const response = await this.post(
         "/validate_device_token",
         JSON.stringify({
           device_token: deviceToken,
-          transaction_id: crypto.randomUUID(),
+          transaction_id: transactionId,
           timestamp: Date.now(),
         }),
         controller.signal
