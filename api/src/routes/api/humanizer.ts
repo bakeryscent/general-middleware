@@ -50,6 +50,16 @@ const extractText = (result: ProxyResult) => {
   }
 
   if (body && typeof body === "object") {
+    const outputText = (body as any)?.output_text;
+
+    if (typeof outputText === "string") {
+      return outputText.trim();
+    }
+
+    if (Array.isArray(outputText) && outputText.length) {
+      return outputText.join("").trim();
+    }
+
     //
     // Responses API format
     //
