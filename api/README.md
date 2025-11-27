@@ -89,6 +89,24 @@ Common causes:
 - `DeviceCheck validation timed out` – Apple endpoint unreachable; retry with exponential backoff.
 - `DeviceCheck validation request failed` – network error between server and Apple; check upstream connectivity.
 
+## Client response contract
+
+Every route returns JSON. Successful calls return the raw value documented by the endpoint (e.g. `/humanizer/detect` returns an integer). Failures always include a human-friendly `message` plus optional diagnostic fields that the client UI can surface or log.
+
+### DeviceCheck guard errors
+
+- Missing header → `401` with `{"message":"DeviceCheck token is required","header":"x-devicecheck-token"}`.
+- Invalid/expired token → mirrors Apple's status (usually `400`) with `{"message":"Invalid DeviceCheck token","reason":"{...apple body...}"}`.
+- Timeouts/network errors → `504`/`503` and `reason` describing the issue so the client can retry accordingly.
+
+### Humanizer/OpenAI errors
+
+- OpenAI not configured → `500` `{"message":"OpenAI is not configured"}`.
+- Upstream failure → same status Apple returned with `{"message":"OpenAI request failed","details":{...OpenAI error body...}}`.
+- Non-numeric detect output → `502` `{"message":"OpenAI did not return a numeric probability","details":"<raw text>"}`.
+
+Clients should treat any non-2xx as a recoverable guard failure, displaying `message` to the user and logging `reason`/`details` for debugging. The DeviceCheck header must still accompany retries.
+
 ## Axiom telemetry
 
 Set `AXIOM_TOKEN` (ingest scope) and `AXIOM_DATASET` to push OpenTelemetry spans straight into Axiom. When those env vars are present the server wires an OTLP HTTP exporter and automatically sends:
@@ -217,6 +235,40 @@ curl -X POST http://localhost:3000/api/humanizer/detect \
 # -> 64
 ```
 
+#### Request body
+
+```json
+{
+	"text": "<string>"
+}
+```
+
+- `text` – required, minimum 1 character. DeviceCheck header `x-devicecheck-token` must also be present.
+
+#### Successful response
+
+```json
+64
+```
+
+- The response is a plain number (`0-100`).
+
+#### Error responses
+
+```json
+{
+	"message": "OpenAI request failed",
+	"details": {
+		"error": {
+			"message": "Invalid value ...",
+			"type": "invalid_request_error"
+		}
+	}
+}
+```
+
+Refer to the **Client response contract** section for all possible error shapes (DeviceCheck missing/invalid, OpenAI failures, validation errors).
+
 ### `POST /api/humanizer/humanize`
 
 Rewrites the text to sound more natural based on OpenAI `gpt-5-nano`.
@@ -229,6 +281,50 @@ curl -X POST http://localhost:3000/api/humanizer/humanize \
 		"text": "The middleware abstracted request pipelining in a highly systematic manner."
 	}'
 # -> "Our middleware keeps requests flowing smoothly without feeling robotic."
+```
+
+#### Request body
+
+Same payload as `/detect`:
+
+```json
+{
+	"text": "<string>"
+}
+```
+
+#### Successful response
+
+```json
+"Our middleware keeps requests flowing smoothly without feeling robotic."
+```
+
+- Returns a plain string containing the rewritten text.
+
+#### Error responses
+
+The shape matches `/detect` errors, e.g.:
+
+```json
+{
+	"message": "OpenAI request failed",
+	"details": {
+		"error": {
+			"message": "Rate limit hit",
+			"type": "rate_limit_error"
+		}
+	}
+}
+```
+
+Validation failures (e.g., empty `text`) come from Elysia’s schema validator:
+
+```json
+{
+	"type": "ValidationError",
+	"property": "text",
+	"reason": "Expected string with length >= 1"
+}
 ```
 
 ## Docker (Dokploy ready)

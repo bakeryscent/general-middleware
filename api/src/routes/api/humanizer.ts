@@ -118,7 +118,17 @@ const callOpenAi = async (
     const result = await openAiClient.proxy({
       model: MODEL,
       payload: {
-        input: renderPrompt(template, text),
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: renderPrompt(template, text),
+              },
+            ],
+          },
+        ],
       },
     });
 
