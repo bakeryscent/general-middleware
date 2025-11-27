@@ -1,0 +1,28 @@
+version: "1"
+apps:
+  - name: middleware-api
+    repository:
+      # Update with your Git provider URL and branch
+      url: https://github.com/YOUR-ORG/middleware.git
+      branch: main
+      # Dokploy will run docker build inside this directory
+      context: api
+    docker:
+      file: api/Dockerfile
+      buildArgs: {}
+    env:
+      PORT: "3000"
+      NODE_ENV: "production"
+    healthCheck:
+      path: /api/ping
+      port: 3000
+      intervalSeconds: 15
+      timeoutSeconds: 5
+    resources:
+      cpu: "0.5"
+      memory: "512Mi"
+    deploy:
+      strategy: rolling
+      autoRedeploy: true
+      maxUnavailable: 1
+      maxSurge: 1
