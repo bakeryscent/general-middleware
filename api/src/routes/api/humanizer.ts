@@ -41,66 +41,93 @@ const renderPrompt = (template: string, text: string) =>
 /**
  * Extracts text from Responses API or fallback Chat response.
  */
-const extractText = (result: ProxyResult) => {
-  const body = result.body as Record<string, unknown> | string | undefined;
+const extractText = (result: ProxyResult): string => {
+  const raw = result.body as any;
 
   // Sometimes proxy returns raw text
-  if (typeof body === "string") {
-    return body.trim();
+  if (typeof raw === "string") {
+    return raw.trim();
   }
 
-  if (body && typeof body === "object") {
-    const outputText = (body as any)?.output_text;
+  // Helper: unwrap nested containers like { response: { ... } } or { data: { ... } }
+  const unwrapResponse = (obj: any): any => {
+    if (!obj || typeof obj !== "object") return obj;
 
-    if (typeof outputText === "string") {
-      return outputText.trim();
+    // Already looks like a Responses object
+    if (obj.object === "response" && Array.isArray(obj.output)) {
+      return obj;
     }
 
-    if (Array.isArray(outputText) && outputText.length) {
-      return outputText.join("").trim();
+    if (obj.response && typeof obj.response === "object") {
+      return unwrapResponse(obj.response);
     }
 
-    //
-    // Responses API format
-    //
-    const fromOutput = (body as any)?.output;
+    if (obj.data && typeof obj.data === "object") {
+      return unwrapResponse(obj.data);
+    }
 
-    if (Array.isArray(fromOutput)) {
-      const firstContent = fromOutput[0]?.content;
-      if (Array.isArray(firstContent)) {
-        const textChunk = firstContent.find(
-          (chunk: any) => typeof chunk?.text === "string"
-        );
-        if (textChunk?.text) {
-          return String(textChunk.text).trim();
+    return obj;
+  };
+
+  const body = unwrapResponse(raw);
+
+  if (!body || typeof body !== "object") {
+    throw new Error(
+      "Unable to extract text from OpenAI response: non-object body " +
+        JSON.stringify(body).slice(0, 500)
+    );
+  }
+
+  //
+  // 1) Try convenience `output_text` if present
+  //
+  const maybeOutputText = (body as any).output_text;
+  if (typeof maybeOutputText === "string" && maybeOutputText.trim().length > 0) {
+    return maybeOutputText.trim();
+  }
+  if (Array.isArray(maybeOutputText)) {
+    const joined = maybeOutputText
+      .filter((p) => typeof p === "string")
+      .join("")
+      .trim();
+    if (joined.length > 0) return joined;
+  }
+
+  //
+  // 2) Standard Responses API: output[*].content[*].text
+  //
+  const output = (body as any).output;
+  if (Array.isArray(output)) {
+    const pieces: string[] = [];
+
+    for (const item of output) {
+      const contents = (item as any)?.content;
+      if (!Array.isArray(contents)) continue;
+
+      for (const part of contents) {
+        if (typeof part?.text === "string") {
+          pieces.push(part.text);
         }
       }
     }
 
-    //
-    // Legacy Chat format (fallback)
-    //
-    const choices = (body as any)?.choices;
-    if (Array.isArray(choices)) {
-      const choice = choices[0];
-      const messageContent = choice?.message?.content;
-
-      if (typeof messageContent === "string") {
-        return messageContent.trim();
-      }
-
-      if (Array.isArray(messageContent)) {
-        const part = messageContent.find(
-          (piece: any) => typeof piece?.text === "string"
-        );
-        if (part?.text) {
-          return String(part.text).trim();
-        }
-      }
+    if (pieces.length > 0) {
+      return pieces.join("").trim();
     }
   }
 
-  throw new Error("Unable to extract text from OpenAI response");
+  //
+  // 3) Fallback: simple `text` field
+  //
+  if (typeof (body as any).text === "string" && (body as any).text.trim().length > 0) {
+    return (body as any).text.trim();
+  }
+
+  // Final safety: log shape for debugging
+  throw new Error(
+    "Unable to extract text from OpenAI response: " +
+      JSON.stringify(body).slice(0, 500)
+  );
 };
 
 type HumanizerAction = "detect" | "humanize";
@@ -108,8 +135,7 @@ type HumanizerAction = "detect" | "humanize";
 type OpenAiCallResult = { value: string } | { error: Response };
 
 /**
- * FINAL: Calls OpenAI Responses API with a simple string `input`.
- * This avoids the whole `input[0].content[0].type` problem entirely.
+ * Calls OpenAI Responses API with message-style `input_text`.
  */
 const callOpenAi = async (
   text: string,
@@ -129,21 +155,28 @@ const callOpenAi = async (
   });
 
   try {
+    const payload = {
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: prompt,
+            },
+          ],
+        },
+      ],
+    };
+
+    console.info(
+      "humanizer.openai.payload",
+      JSON.stringify(payload, null, 2)
+    );
+
     const result = await openAiClient.proxy({
       model: MODEL,
-      payload: {
-        input: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: prompt,
-              },
-            ],
-          },
-        ],
-      },
+      payload,
     });
 
     if (!result.ok) {
