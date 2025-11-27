@@ -6,8 +6,10 @@ import { healthRoutes } from "./routes/health";
 import { env } from "./config/env";
 import { jsonError } from "./lib/http";
 import { DeviceCheckError, validateDeviceCheckToken } from "./lib/devicecheck";
+import { createAxiomTraceExporter } from "./telemetry/axiom";
 
 const DEVICECHECK_HEADER = "x-devicecheck-token";
+const axiomTraceExporter = createAxiomTraceExporter();
 
 export const createApp = () =>
   new Elysia({ normalize: true })
@@ -17,6 +19,7 @@ export const createApp = () =>
         resource: resourceFromAttributes({
           "service.instance.id": env.instanceId,
         }),
+        ...(axiomTraceExporter && { traceExporter: axiomTraceExporter }),
       })
     )
     .onBeforeHandle(async ({ request }) => {

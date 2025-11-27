@@ -18,6 +18,9 @@ bun start                 # run once
 | `PORT` | No | HTTP port Bun listens on | `3000` |
 | `NODE_ENV` | No | Environment label used in logs + OpenTelemetry service name | `development` |
 | `INSTANCE_ID` | No | Optional identifier injected into trace resource data | `local` |
+| `AXIOM_TOKEN` | No | Required to ship traces to Axiom (enable when you want telemetry) | — |
+| `AXIOM_DATASET` | No | Axiom dataset that receives OpenTelemetry spans | — |
+| `AXIOM_BASE_URL` | No | Override for regional Axiom base (default US endpoint) | `https://api.axiom.co` |
 | `OPENAI_API_KEY` | Yes (for `/api/openai`) | Secret passed to OpenAI's `Authorization` header | — |
 | `OPENAI_BASE_URL` | No | Override for the OpenAI REST base URL (useful for proxies / Azure) | `https://api.openai.com/v1` |
 | `OPENAI_ORG_ID` | No | Adds `OpenAI-Organization` header when present | — |
@@ -58,6 +61,21 @@ curl -X POST http://localhost:3000/api/echo \
 ```
 
 If you need to exempt infrastructure probes (eg. uptime checks) from DeviceCheck, place them behind a small shim service that can attach a valid token, or add an allowlist in code before the DeviceCheck guard.
+
+## Axiom telemetry
+
+Set `AXIOM_TOKEN` (ingest scope) and `AXIOM_DATASET` to push OpenTelemetry spans straight into Axiom. When those env vars are present the server wires an OTLP HTTP exporter and automatically sends:
+
+- One span per HTTP request with route/method/status metadata.
+- Error spans whenever DeviceCheck rejects a call or an upstream provider (OpenAI, etc.) fails; the span status is marked `ERROR` with stack traces so you can pivot directly from Live view.
+
+### Verifying in Axiom
+
+1. Deploy with the Axiom env vars set (or run locally with them in `.env`).
+2. Generate a failing request (eg. omit `x-devicecheck-token`) to trigger an error span.
+3. Open Axiom → your dataset → **Live** tab and you should see the span arrive within a couple seconds (filter by `service.name == "${telemetryServiceName}"`).
+
+You can build dashboards or alerts on the dataset using `status_code >= 400` or `span.status.code == "ERROR"` to watch for regressions.
 
 ## Code structure
 

@@ -28,6 +28,11 @@ export const env = {
   version: Bun.env.APP_VERSION ?? "0.1.0",
   instanceId: Bun.env.INSTANCE_ID ?? "local",
   telemetryServiceName: `middleware-${Bun.env.NODE_ENV ?? "development"}`,
+  axiom: {
+    token: trimOrUndefined(Bun.env.AXIOM_TOKEN),
+    dataset: trimOrUndefined(Bun.env.AXIOM_DATASET),
+    baseUrl: sanitizeUrl(Bun.env.AXIOM_BASE_URL, "https://api.axiom.co"),
+  },
   deviceCheck: {
     keyId: trimOrUndefined(Bun.env.DEVICECHECK_KEY_ID),
     teamId: trimOrUndefined(Bun.env.DEVICECHECK_TEAM_ID),
@@ -62,3 +67,4 @@ export type OpenAiEnvConfig = ProviderConfigMap["openai"];
 export type ClaudeEnvConfig = ProviderConfigMap["claude"];
 export type GeminiEnvConfig = ProviderConfigMap["gemini"];
 export type DeviceCheckEnvConfig = typeof env.deviceCheck;
+export type AxiomEnvConfig = typeof env.axiom;
