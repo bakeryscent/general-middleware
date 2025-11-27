@@ -19,6 +19,7 @@ IMPORTANT: Return ONLY the rewritten text. Do not include any conversational fil
 Text:
 {{TEXT}}`;
 
+// Body schema: { text: string }
 const humanizerBodySchema = t.Object({
   text: t.String({ minLength: 1 }),
 });
@@ -97,7 +98,8 @@ type HumanizerAction = "detect" | "humanize";
 type OpenAiCallResult = { value: string } | { error: Response };
 
 /**
- * FINAL: Calls OpenAI Responses API (NOT chat).
+ * FINAL: Calls OpenAI Responses API with a simple string `input`.
+ * This avoids the whole `input[0].content[0].type` problem entirely.
  */
 const callOpenAi = async (
   text: string,
@@ -109,26 +111,19 @@ const callOpenAi = async (
     return { error: configError };
   }
 
+  const prompt = renderPrompt(template, text);
+
   console.info("humanizer.openai.request", {
     action,
-    length: text.length,
+    length: prompt.length,
   });
 
   try {
     const result = await openAiClient.proxy({
       model: MODEL,
+      // 👇 This is the key change: `input` is just a string
       payload: {
-        input: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: renderPrompt(template, text),
-              },
-            ],
-          },
-        ],
+        input: prompt,
       },
     });
 
@@ -217,11 +212,7 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
         length: body.text.length,
       });
 
-      const result = await callOpenAi(
-        body.text,
-        DETECT_PROMPT,
-        "detect"
-      );
+      const result = await callOpenAi(body.text, DETECT_PROMPT, "detect");
 
       if ("error" in result) {
         return result.error;
@@ -233,6 +224,7 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
         return parsed.error;
       }
 
+      // Just return the numeric probability as JSON (e.g. 73)
       return parsed.value;
     },
     {
@@ -246,16 +238,13 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
         length: body.text.length,
       });
 
-      const result = await callOpenAi(
-        body.text,
-        HUMANIZE_PROMPT,
-        "humanize"
-      );
+      const result = await callOpenAi(body.text, HUMANIZE_PROMPT, "humanize");
 
       if ("error" in result) {
         return result.error;
       }
 
+      // Return the rewritten text
       return result.value;
     },
     {
