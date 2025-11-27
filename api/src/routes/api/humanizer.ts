@@ -101,7 +101,7 @@ const callOpenAi = async (text: string, template: string, action: HumanizerActio
             role: "user",
             content: [
               {
-                type: "text",
+                type: "input_text",
                 text: renderPrompt(template, text),
               },
             ],
