@@ -121,9 +121,18 @@ const callOpenAi = async (
   try {
     const result = await openAiClient.proxy({
       model: MODEL,
-      // 👇 This is the key change: `input` is just a string
       payload: {
-        input: prompt,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: prompt,
+              },
+            ],
+          },
+        ],
       },
     });
 
