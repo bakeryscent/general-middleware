@@ -29,7 +29,7 @@ export const createApp = () =>
         console.warn("DeviceCheck missing", {
           path: new URL(request.url).pathname,
         });
-        throw jsonError(401, {
+        return jsonError(401, {
           message: "DeviceCheck token is required",
           header: DEVICECHECK_HEADER,
         });
@@ -44,7 +44,7 @@ export const createApp = () =>
             status: error.status,
             details: error.details,
           });
-          throw jsonError(error.status, {
+          return jsonError(error.status, {
             message: error.message,
             details: error.details,
           });

@@ -22,10 +22,12 @@ const humanizerBodySchema = t.Object({
 
 const ensureOpenAiReady = () => {
   if (!openAiClient.isConfigured()) {
-    throw jsonError(500, {
+    return jsonError(500, {
       message: "OpenAI is not configured",
     });
   }
+
+  return undefined;
 };
 
 const renderPrompt = (template: string, text: string) => template.replace("{{TEXT}}", text);
@@ -71,65 +73,95 @@ const extractText = (result: ProxyResult) => {
   throw new Error("Unable to extract text from OpenAI response");
 };
 
-const callOpenAi = async (text: string, template: string, action: "detect" | "humanize") => {
-  ensureOpenAiReady();
+type HumanizerAction = "detect" | "humanize";
+
+type OpenAiCallResult =
+  | { value: string }
+  | { error: Response };
+
+const callOpenAi = async (text: string, template: string, action: HumanizerAction): Promise<OpenAiCallResult> => {
+  const configError = ensureOpenAiReady();
+  if (configError) {
+    return { error: configError };
+  }
 
   console.info("humanizer.openai.request", {
     action,
     length: text.length,
   });
 
-  const result = await openAiClient.proxy({
-    model: MODEL,
-    payload: {
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: renderPrompt(template, text),
-            },
-          ],
-        },
-      ],
-    },
-  });
+  try {
+    const result = await openAiClient.proxy({
+      model: MODEL,
+      payload: {
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: renderPrompt(template, text),
+              },
+            ],
+          },
+        ],
+      },
+    });
 
-  if (!result.ok) {
-    console.error("humanizer.openai.error", {
+    if (!result.ok) {
+      console.error("humanizer.openai.error", {
+        action,
+        status: result.status,
+        details: result.error,
+      });
+
+      return {
+        error: jsonError(result.status, {
+          message: "OpenAI request failed",
+          details: result.error,
+        }),
+      };
+    }
+
+    const textResult = extractText(result);
+
+    console.info("humanizer.openai.success", {
       action,
       status: result.status,
-      details: result.error,
     });
-    throw jsonError(result.status, {
-      message: "OpenAI request failed",
-      details: result.error,
+
+    return { value: textResult };
+  } catch (error) {
+    console.error("humanizer.openai.exception", {
+      action,
+      error,
     });
+
+    return {
+      error: jsonError(502, {
+        message: "OpenAI request failed",
+        details: error instanceof Error ? error.message : error,
+      }),
+    };
   }
-
-  const textResult = extractText(result);
-
-  console.info("humanizer.openai.success", {
-    action,
-    status: result.status,
-  });
-
-  return textResult;
 };
 
-const parseProbability = (value: string) => {
+const parseProbability = (value: string): { value: number } | { error: Response } => {
   const match = value.trim().match(/-?\d+(?:\.\d+)?/);
   const numeric = match ? Number(match[0]) : Number.NaN;
 
   if (!Number.isFinite(numeric)) {
-    throw jsonError(502, {
-      message: "OpenAI did not return a numeric probability",
-      details: value,
-    });
+    return {
+      error: jsonError(502, {
+        message: "OpenAI did not return a numeric probability",
+        details: value,
+      }),
+    };
   }
 
-  return Math.min(100, Math.max(0, Math.round(numeric)));
+  return {
+    value: Math.min(100, Math.max(0, Math.round(numeric))),
+  };
 };
 
 export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
@@ -137,8 +169,19 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
     "/detect",
     async ({ body }) => {
       console.info("humanizer.detect.request", { length: body.text.length });
-      const text = await callOpenAi(body.text, DETECT_PROMPT, "detect");
-      return parseProbability(text);
+      const result = await callOpenAi(body.text, DETECT_PROMPT, "detect");
+
+      if ("error" in result) {
+        return result.error;
+      }
+
+      const parsed = parseProbability(result.value);
+
+      if ("error" in parsed) {
+        return parsed.error;
+      }
+
+      return parsed.value;
     },
     {
       body: humanizerBodySchema,
@@ -148,8 +191,13 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
     "/humanize",
     async ({ body }) => {
       console.info("humanizer.humanize.request", { length: body.text.length });
-      const rewritten = await callOpenAi(body.text, HUMANIZE_PROMPT, "humanize");
-      return rewritten;
+      const result = await callOpenAi(body.text, HUMANIZE_PROMPT, "humanize");
+
+      if ("error" in result) {
+        return result.error;
+      }
+
+      return result.value;
     },
     {
       body: humanizerBodySchema,
