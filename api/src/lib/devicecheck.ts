@@ -1,5 +1,6 @@
 import { SignJWT, importPKCS8, type KeyLike } from "jose";
 import { env, type DeviceCheckEnvConfig } from "../config/env";
+import { recordSpanException } from "../telemetry/span";
 
 const DEVICECHECK_AUDIENCE = "devicecheck.apple.com";
 const AUTH_TOKEN_TTL_SECONDS = 20 * 60;
@@ -31,6 +32,22 @@ const assertDeviceCheckConfig = (config: DeviceCheckEnvConfig) => {
 };
 
 const buildDeviceCheckUrl = (baseUrl: string, path: string) => `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+
+const toAttributeString = (value: unknown) => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
 
 class DeviceCheckClient {
   private signingKeyPromise?: Promise<KeyLike>;
@@ -92,7 +109,11 @@ class DeviceCheckClient {
 
   public async validateToken(deviceToken: string) {
     if (!deviceToken) {
-      throw new DeviceCheckError("Missing DeviceCheck token", 401);
+      const error = new DeviceCheckError("Missing DeviceCheck token", 401);
+      recordSpanException(error, {
+        "devicecheck.phase": "validation",
+      });
+      throw error;
     }
 
     const controller = new AbortController();
@@ -111,11 +132,17 @@ class DeviceCheckClient {
 
       if (!response.ok) {
         const details = await response.text().catch(() => undefined);
-        throw new DeviceCheckError(
+        const deviceError = new DeviceCheckError(
           response.status === 400 ? "Invalid DeviceCheck token" : "DeviceCheck validation failed",
           response.status,
-          details
+          details ?? "No response body"
         );
+        recordSpanException(deviceError, {
+          "devicecheck.phase": "response",
+          "devicecheck.status": response.status,
+          "devicecheck.details": toAttributeString(details ?? "No response body"),
+        });
+        throw deviceError;
       }
     } catch (error) {
       if (error instanceof DeviceCheckError) {
@@ -123,10 +150,19 @@ class DeviceCheckClient {
       }
 
       if (error instanceof Error && error.name === "AbortError") {
-        throw new DeviceCheckError("DeviceCheck validation timed out", 504);
+        const timeoutError = new DeviceCheckError("DeviceCheck validation timed out", 504);
+        recordSpanException(timeoutError, {
+          "devicecheck.phase": "timeout",
+        });
+        throw timeoutError;
       }
 
-      throw new DeviceCheckError("DeviceCheck validation request failed", 503, error);
+      const requestError = new DeviceCheckError("DeviceCheck validation request failed", 503, error);
+      recordSpanException(requestError, {
+        "devicecheck.phase": "request",
+        "devicecheck.details": toAttributeString(error instanceof Error ? error.message : error),
+      });
+      throw requestError;
     } finally {
       clearTimeout(timeout);
     }

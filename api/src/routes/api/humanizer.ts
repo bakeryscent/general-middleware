@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { jsonError } from "../../lib/http";
 import { openAiClient } from "../../clients/openai";
 import type { ProxyResult } from "../../clients/proxy-client";
+import { recordSpanException } from "../../telemetry/span";
 
 const MODEL = "gpt-5-nano";
 const DETECT_PROMPT = `Analyze the following text and determine the probability that it was written by an AI.
@@ -22,6 +23,7 @@ const humanizerBodySchema = t.Object({
 
 const ensureOpenAiReady = () => {
   if (!openAiClient.isConfigured()) {
+    recordSpanException("OpenAI client not configured");
     return jsonError(500, {
       message: "OpenAI is not configured",
     });
@@ -115,6 +117,11 @@ const callOpenAi = async (text: string, template: string, action: HumanizerActio
         details: result.error,
       });
 
+      recordSpanException("OpenAI request failed", {
+        "openai.status": result.status,
+        "openai.action": action,
+      });
+
       return {
         error: jsonError(result.status, {
           message: "OpenAI request failed",
@@ -137,6 +144,10 @@ const callOpenAi = async (text: string, template: string, action: HumanizerActio
       error,
     });
 
+    recordSpanException(error, {
+      "openai.action": action,
+    });
+
     return {
       error: jsonError(502, {
         message: "OpenAI request failed",
@@ -151,6 +162,9 @@ const parseProbability = (value: string): { value: number } | { error: Response 
   const numeric = match ? Number(match[0]) : Number.NaN;
 
   if (!Number.isFinite(numeric)) {
+    recordSpanException("OpenAI did not return a numeric probability", {
+      "humanizer.output": value,
+    });
     return {
       error: jsonError(502, {
         message: "OpenAI did not return a numeric probability",

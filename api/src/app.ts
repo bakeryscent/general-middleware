@@ -7,6 +7,7 @@ import { env } from "./config/env";
 import { jsonError } from "./lib/http";
 import { DeviceCheckError, validateDeviceCheckToken } from "./lib/devicecheck";
 import { createAxiomTraceExporter } from "./telemetry/axiom";
+import { recordSpanException } from "./telemetry/span";
 
 const DEVICECHECK_HEADER = "x-devicecheck-token";
 const axiomTraceExporter = createAxiomTraceExporter();
@@ -23,11 +24,13 @@ export const createApp = () =>
       })
     )
     .onBeforeHandle(async ({ request }) => {
+      const path = new URL(request.url).pathname;
       const token = request.headers.get(DEVICECHECK_HEADER);
 
       if (!token) {
-        console.warn("DeviceCheck missing", {
-          path: new URL(request.url).pathname,
+        console.warn("DeviceCheck missing", { path });
+        recordSpanException("Missing DeviceCheck token", {
+          "devicecheck.path": path,
         });
         return jsonError(401, {
           message: "DeviceCheck token is required",
@@ -39,14 +42,23 @@ export const createApp = () =>
         await validateDeviceCheckToken(token);
       } catch (error) {
         if (error instanceof DeviceCheckError) {
-          console.warn("DeviceCheck rejected", {
-            path: new URL(request.url).pathname,
-            status: error.status,
-            details: error.details,
+          const logDetails = typeof error.details === "string" ? error.details : JSON.stringify(error.details);
+
+          recordSpanException(error, {
+            "devicecheck.path": path,
+            "devicecheck.reason": logDetails,
+            "devicecheck.status": error.status,
           });
+
+          console.warn("DeviceCheck rejected", {
+            path,
+            status: error.status,
+            reason: logDetails,
+          });
+
           return jsonError(error.status, {
             message: error.message,
-            details: error.details,
+            reason: logDetails,
           });
         }
 
