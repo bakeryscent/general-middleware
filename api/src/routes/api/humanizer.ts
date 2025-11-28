@@ -296,8 +296,25 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
         return result.error;
       }
 
-      // Return the rewritten text
-      return result.value;
+      const rewrittenText = result.value;
+
+      // Immediately score the rewritten text so the client gets fresh telemetry
+      const scoreResult = await callOpenAi(rewrittenText, DETECT_PROMPT, "detect");
+
+      if ("error" in scoreResult) {
+        return scoreResult.error;
+      }
+
+      const parsedScore = parseProbability(scoreResult.value);
+
+      if ("error" in parsedScore) {
+        return parsedScore.error;
+      }
+
+      return {
+        text: rewrittenText,
+        score: parsedScore.value,
+      };
     },
     {
       body: humanizerBodySchema,

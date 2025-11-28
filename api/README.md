@@ -296,10 +296,13 @@ Same payload as `/detect`:
 #### Successful response
 
 ```json
-"Our middleware keeps requests flowing smoothly without feeling robotic."
+{
+	"text": "Our middleware keeps requests flowing smoothly without feeling robotic.",
+	"score": 28
+}
 ```
 
-- Returns a plain string containing the rewritten text.
+- Returns JSON with the rewritten `text` plus a fresh `score` (0-100) computed immediately after humanizing by re-running the detect prompt on the new text.
 
 #### Error responses
 
