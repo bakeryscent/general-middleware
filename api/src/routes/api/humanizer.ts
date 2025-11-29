@@ -6,15 +6,41 @@ import { recordSpanException } from "../../telemetry/span";
 
 const MODEL = "gpt-5-nano";
 
-const DETECT_PROMPT = `Analyze the following text and determine the probability that it was written by an AI.
-Return ONLY a number between 0 and 100 representing the percentage probability.
-Do not include any other text or symbols.
+const DETECT_PROMPT = `Analyze the following text and estimate the probability (from 0 to 100) that it was written primarily by an AI language model (e.g., GPT-style, Claude-style, Gemini-style, LLaMA-style, or similar) rather than a human.
+
+In your internal reasoning (which you should NOT output), consider:
+- Stylistic “smoothness” and consistency (few typos, uniformly polished sentences).
+- Repetitive patterns, generic phrasing, and over-explaining simple concepts.
+- Lack of specific, verifiable personal experiences or concrete details.
+- Overly balanced, hedged, or neutral tone across the entire text.
+- Logical consistency vs. subtle human-like contradictions or idiosyncrasies.
+- Whether the text seems stitched together from known AI tropes or stock phrases.
+- Whether the text appears partially AI-written (mixed human + AI): in that case, output an intermediate probability.
+
+Your final answer must follow these constraints:
+- Return ONLY a number between 0 and 100 representing the percentage probability that the text was written by an AI.
+- Do not include any other text or symbols.
 
 Text:
 {{TEXT}}`;
 
-const HUMANIZE_PROMPT = `Rewrite the following text to make it sound more human, natural, and engaging.
-IMPORTANT: Return ONLY the rewritten text. Do not include any conversational filler like "Here is the text" or "Alright".
+const HUMANIZE_PROMPT = `Rewrite the following text to make it sound more human, natural, and engaging, as if it were written by a real person for other real people. You MUST keep the same language (e.g., if the text is in Italian, respond in Italian; if it is in English, respond in English; etc.).
+
+In your internal reasoning (which you should NOT output), consider:
+- Keeping the original meaning, intent, and key information intact.
+- Using natural, conversational phrasing (including contractions where appropriate).
+- Varying sentence length and rhythm (mix short, punchy sentences with longer, more detailed ones).
+- Removing or toning down robotic, overly formal, or repetitive language.
+- Avoiding generic AI-like patterns and stock phrases (e.g., “As an AI…”, “In conclusion,” used formulaically, “overall,” “this section will explore…”).
+- Adding subtle human touches: mild emotion, small asides, or softening phrases where appropriate, without changing the core content.
+- Preserving domain-specific terminology and technical accuracy, but explaining dense parts a bit more naturally when needed.
+- Maintaining the original language of the text exactly (do NOT translate it).
+
+IMPORTANT OUTPUT CONSTRAINTS:
+- Return ONLY the rewritten text.
+- Do NOT include any introductory or closing filler such as “Here is the text”, “Sure, here you go:”, or “Alright”.
+- Do NOT restate or reference these instructions.
+- Do NOT repeat the original text.
 
 Text:
 {{TEXT}}`;
