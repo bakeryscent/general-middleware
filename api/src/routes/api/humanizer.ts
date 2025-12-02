@@ -3,8 +3,16 @@ import { jsonError } from "../../lib/http";
 import { openAiClient } from "../../clients/openai";
 import type { ProxyResult } from "../../clients/proxy-client";
 import { recordSpanException } from "../../telemetry/span";
+import { env } from "../../config/env";
 
 const MODEL = "gpt-5-nano";
+const humanizerEnv = env.humanizer;
+
+const getMockScore = () => {
+  const min = Math.min(humanizerEnv.mockScoreMin, humanizerEnv.mockScoreMax);
+  const max = Math.max(humanizerEnv.mockScoreMin, humanizerEnv.mockScoreMax);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+};
 
 const DETECT_PROMPT = `Analyze the following text and estimate the probability (from 0 to 100) that it was written primarily by an AI language model (e.g., GPT-style, Claude-style, Gemini-style, LLaMA-style, or similar) rather than a human.
 
@@ -323,6 +331,13 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
       }
 
       const rewrittenText = result.value;
+
+      if (humanizerEnv.scoreMode === "mock") {
+        return {
+          text: rewrittenText,
+          score: getMockScore(),
+        };
+      }
 
       // Immediately score the rewritten text so the client gets fresh telemetry
       const scoreResult = await callOpenAi(rewrittenText, DETECT_PROMPT, "detect");

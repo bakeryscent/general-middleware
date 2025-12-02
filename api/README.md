@@ -31,6 +31,9 @@ bun start                 # run once
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Yes (for `/api/gemini`) | API key appended as `?key=` when calling Gemini | — |
 | `GEMINI_BASE_URL` | No | Override for Gemini REST base URL | `https://generativelanguage.googleapis.com/v1beta` |
 | `GEMINI_DEFAULT_ACTION` | No | Default action appended to `models/{model}:<action>` when `path` not provided | `generateContent` |
+| `HUMANIZER_SCORE_MODE` | No | `mock` forces humanize scores to be random; set to `openai` to use real detection | `mock` |
+| `HUMANIZER_MOCK_SCORE_MIN` | No | Lower bound (inclusive) for the mock humanize score | `10` |
+| `HUMANIZER_MOCK_SCORE_MAX` | No | Upper bound (inclusive) for the mock humanize score | `30` |
 | `DEVICECHECK_KEY_ID` | Yes | Apple key ID used to sign DeviceCheck auth tokens | — |
 | `DEVICECHECK_TEAM_ID` | Yes | Apple Developer Team ID (used as JWT issuer) | — |
 | `DEVICECHECK_PRIVATE_KEY` | Yes | Full text of the DeviceCheck `.p8` key (use literal newlines or `\n`) | — |
@@ -303,6 +306,7 @@ Same payload as `/detect`:
 ```
 
 - Returns JSON with the rewritten `text` plus a fresh `score` (0-100) computed immediately after humanizing by re-running the detect prompt on the new text.
+- While `HUMANIZER_SCORE_MODE=mock` (default) the `score` is a random integer between `HUMANIZER_MOCK_SCORE_MIN` and `HUMANIZER_MOCK_SCORE_MAX` (10-30) so the client can keep moving without waiting for reliable detect results. Set `HUMANIZER_SCORE_MODE=openai` to switch back to actual OpenAI scoring.
 
 #### Error responses
 

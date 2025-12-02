@@ -10,6 +10,9 @@ const trimOrUndefined = (value?: string | null): string | undefined =>
 const sanitizeUrl = (value: string | undefined, fallback: string): string =>
   (value ?? fallback).replace(/\/+$/, "");
 
+const toHumanizerScoreMode = (value?: string | null) =>
+  value?.toLowerCase() === "openai" ? "openai" : "mock";
+
 const readFileFromPath = (path: string | undefined): string | undefined => {
   if (!path) {
     return undefined;
@@ -62,6 +65,11 @@ export const env = {
       defaultAction: trimOrUndefined(Bun.env.GEMINI_DEFAULT_ACTION) ?? "generateContent",
     },
   },
+  humanizer: {
+    scoreMode: toHumanizerScoreMode(Bun.env.HUMANIZER_SCORE_MODE),
+    mockScoreMin: toNumber(Bun.env.HUMANIZER_MOCK_SCORE_MIN, 10),
+    mockScoreMax: toNumber(Bun.env.HUMANIZER_MOCK_SCORE_MAX, 30),
+  },
 } as const;
 
 export type ProviderConfigMap = typeof env.providers;
@@ -70,3 +78,4 @@ export type ClaudeEnvConfig = ProviderConfigMap["claude"];
 export type GeminiEnvConfig = ProviderConfigMap["gemini"];
 export type DeviceCheckEnvConfig = typeof env.deviceCheck;
 export type AxiomEnvConfig = typeof env.axiom;
+export type HumanizerEnvConfig = typeof env.humanizer;
