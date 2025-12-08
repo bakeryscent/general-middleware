@@ -186,7 +186,7 @@ const callOpenAi = async (
     return { error: configError };
   }
 
-  const prompt = renderPrompt(template, text);
+  const prompt = payloadOverride ? "" : renderPrompt(template, text);
 
   logModelUsage(action, model);
 
@@ -384,11 +384,23 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
         length: body.text.length,
       });
 
+      const payload = {
+        instructions: HUMANIZE_INSTRUCTIONS,
+        input: [
+          {
+            role: "user",
+            content: buildHumanizeInput(body.text),
+          },
+        ],
+        temperature: 0,
+      };
+
       const humanizeResult = await callOpenAi(
         body.text,
         HUMANIZE_PROMPT,
         "humanize",
-        HUMANIZE_MODEL
+        HUMANIZE_MODEL,
+        payload
       );
 
       if ("error" in humanizeResult) {
