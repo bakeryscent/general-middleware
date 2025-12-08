@@ -163,6 +163,14 @@ type HumanizerAction = "detect" | "humanize";
 
 type OpenAiCallResult = { value: string } | { error: Response };
 
+const logModelUsage = (action: HumanizerAction, model: string) => {
+  const isFallback = model === MODEL;
+  const mode = isFallback ? "FALLBACK" : "custom";
+
+  const logger = isFallback ? console.warn : console.info;
+  logger("humanizer.model", { action, model, mode });
+};
+
 /**
  * Calls OpenAI Responses API with message-style `input_text`.
  */
@@ -179,6 +187,8 @@ const callOpenAi = async (
   }
 
   const prompt = renderPrompt(template, text);
+
+  logModelUsage(action, model);
 
   console.info("humanizer.openai.request", {
     action,
