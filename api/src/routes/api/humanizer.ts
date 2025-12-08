@@ -222,10 +222,14 @@ const callOpenAi = async (
     });
 
     if (!result.ok) {
+      const mode = model === MODEL ? "FALLBACK" : "custom";
+
       console.error("humanizer.openai.error", {
         action,
         status: result.status,
         details: result.error,
+        model,
+        mode,
       });
 
       recordSpanException("OpenAI request failed", {
@@ -237,6 +241,8 @@ const callOpenAi = async (
         error: jsonError(result.status, {
           message: "OpenAI request failed",
           details: result.error,
+          model,
+          mode,
         }),
       };
     }
@@ -250,13 +256,19 @@ const callOpenAi = async (
 
     return { value: textResult };
   } catch (error) {
+    const mode = model === MODEL ? "FALLBACK" : "custom";
+
     console.error("humanizer.openai.exception", {
       action,
       error,
+      model,
+      mode,
     });
 
     recordSpanException(error, {
       "openai.action": action,
+      "openai.model": model,
+      "openai.mode": model === MODEL ? "FALLBACK" : "custom",
     });
 
     return {
@@ -406,7 +418,7 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
         rewrittenText,
         DETECT_PROMPT,
         "detect",
-        MODEL
+        DETECT_MODEL
       );
 
       if ("error" in scoreResult) {
