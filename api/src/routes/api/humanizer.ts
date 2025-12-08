@@ -5,14 +5,9 @@ import type { ProxyResult } from "../../clients/proxy-client";
 import { recordSpanException } from "../../telemetry/span";
 import { env } from "../../config/env";
 
-const MODEL = "gpt-5-nano";
-const humanizerEnv = env.humanizer;
-
-const getMockScore = () => {
-  const min = Math.min(humanizerEnv.mockScoreMin, humanizerEnv.mockScoreMax);
-  const max = Math.max(humanizerEnv.mockScoreMin, humanizerEnv.mockScoreMax);
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-};
+const MODEL = "gpt-5-nano"; // legacy detect model (fallback)
+const DETECT_MODEL = env.humanizer.detectModel;
+const HUMANIZE_MODEL = env.humanizer.humanizeModel;
 
 const DETECT_PROMPT = `Analyze the following text and estimate the probability (from 0 to 100) that it was written primarily by an AI language model (e.g., GPT-style, Claude-style, Gemini-style, LLaMA-style, or similar) rather than a human.
 
@@ -174,7 +169,9 @@ type OpenAiCallResult = { value: string } | { error: Response };
 const callOpenAi = async (
   text: string,
   template: string,
-  action: HumanizerAction
+  action: HumanizerAction,
+  model: string = MODEL,
+  payloadOverride?: unknown
 ): Promise<OpenAiCallResult> => {
   const configError = ensureOpenAiReady();
   if (configError) {
@@ -189,19 +186,20 @@ const callOpenAi = async (
   });
 
   try {
-    const payload = {
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: prompt,
-            },
-          ],
-        },
-      ],
-    };
+    const payload: Record<string, unknown> =
+      (payloadOverride as Record<string, unknown>) ?? {
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: prompt,
+              },
+            ],
+          },
+        ],
+      };
 
     console.info(
       "humanizer.openai.payload",
@@ -209,7 +207,7 @@ const callOpenAi = async (
     );
 
     const result = await openAiClient.proxy({
-      model: MODEL,
+      model,
       payload,
     });
 
@@ -260,6 +258,18 @@ const callOpenAi = async (
   }
 };
 
+const HUMANIZE_INSTRUCTIONS =
+  "You rewrite input text to sound human and always return JSON with 'humanized_text' and 'ai_score'. No extra text.";
+
+const buildHumanizeInput = (text: string) =>
+  `Text:\n"""${text}"""\n\nTask: Rewrite the text so it reads as naturally as possible while keeping the same meaning. Then output JSON with keys 'humanized_text' and 'ai_score', where 'ai_score' is a numeric human-likeness score.`;
+
+const DETECT_INSTRUCTIONS =
+  "You are a model that scores how likely a text is written by AI. Given a text, you must respond ONLY with its AI score as a number (no words, no symbols, no explanation).";
+
+const buildDetectInput = (text: string) =>
+  `Text:\n"""${text}"""\n\nTask: Return ONLY the AI score for this text as a number. Do not add any words or explanation.`;
+
 /**
  * Parses a probability returned by detect endpoint.
  */
@@ -298,7 +308,24 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
         length: body.text.length,
       });
 
-      const result = await callOpenAi(body.text, DETECT_PROMPT, "detect");
+      const payload = {
+        instructions: DETECT_INSTRUCTIONS,
+        input: [
+          {
+            role: "user",
+            content: buildDetectInput(body.text),
+          },
+        ],
+        temperature: 0,
+      };
+
+      const result = await callOpenAi(
+        body.text,
+        DETECT_PROMPT,
+        "detect",
+        DETECT_MODEL,
+        payload
+      );
 
       if ("error" in result) {
         return result.error;
@@ -324,23 +351,48 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
         length: body.text.length,
       });
 
-      const result = await callOpenAi(body.text, HUMANIZE_PROMPT, "humanize");
+      const humanizeResult = await callOpenAi(
+        body.text,
+        HUMANIZE_PROMPT,
+        "humanize",
+        HUMANIZE_MODEL
+      );
 
-      if ("error" in result) {
-        return result.error;
+      if ("error" in humanizeResult) {
+        return humanizeResult.error;
       }
 
-      const rewrittenText = result.value;
+      let rewrittenText = humanizeResult.value;
+      let aiScoreFromModel: number | undefined;
 
-      if (humanizerEnv.scoreMode === "mock") {
+      // Attempt to parse JSON returned by the fine-tuned model
+      try {
+        const parsed = JSON.parse(rewrittenText);
+        if (typeof parsed?.humanized_text === "string") {
+          rewrittenText = parsed.humanized_text;
+        }
+        const maybeScore = parsed?.ai_score;
+        if (typeof maybeScore === "number") {
+          aiScoreFromModel = maybeScore;
+        }
+      } catch {
+        // Ignore parse errors; fall back to existing logic
+      }
+
+      if (aiScoreFromModel !== undefined) {
         return {
           text: rewrittenText,
-          score: getMockScore(),
+          score: aiScoreFromModel,
         };
       }
 
-      // Immediately score the rewritten text so the client gets fresh telemetry
-      const scoreResult = await callOpenAi(rewrittenText, DETECT_PROMPT, "detect");
+      // Fallback: immediately score the rewritten text using detect prompt
+      const scoreResult = await callOpenAi(
+        rewrittenText,
+        DETECT_PROMPT,
+        "detect",
+        MODEL
+      );
 
       if ("error" in scoreResult) {
         return scoreResult.error;

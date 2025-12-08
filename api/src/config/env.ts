@@ -10,8 +10,8 @@ const trimOrUndefined = (value?: string | null): string | undefined =>
 const sanitizeUrl = (value: string | undefined, fallback: string): string =>
   (value ?? fallback).replace(/\/+$/, "");
 
-const toHumanizerScoreMode = (value?: string | null) =>
-  value?.toLowerCase() === "openai" ? "openai" : "mock";
+const trimOrDefault = (value: string | undefined, fallback: string): string =>
+  value?.trim() || fallback;
 
 const readFileFromPath = (path: string | undefined): string | undefined => {
   if (!path) {
@@ -66,9 +66,14 @@ export const env = {
     },
   },
   humanizer: {
-    scoreMode: toHumanizerScoreMode(Bun.env.HUMANIZER_SCORE_MODE),
-    mockScoreMin: toNumber(Bun.env.HUMANIZER_MOCK_SCORE_MIN, 10),
-    mockScoreMax: toNumber(Bun.env.HUMANIZER_MOCK_SCORE_MAX, 30),
+    humanizeModel: trimOrDefault(
+      Bun.env.HUMANIZER_HUMANIZE_MODEL,
+      "ft:gpt-4.1-nano-2025-04-14:bakery-scent-srl:text-humanizer-08-12-2025:CkToTSkg"
+    ),
+    detectModel: trimOrDefault(
+      Bun.env.HUMANIZER_DETECT_MODEL,
+      "ft:gpt-4.1-nano-2025-04-14:bakery-scent-srl:ai-text-analyze-08-12-2025:CkUmccaE"
+    ),
   },
 } as const;
 

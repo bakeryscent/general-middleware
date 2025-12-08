@@ -31,9 +31,8 @@ bun start                 # run once
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Yes (for `/api/gemini`) | API key appended as `?key=` when calling Gemini | — |
 | `GEMINI_BASE_URL` | No | Override for Gemini REST base URL | `https://generativelanguage.googleapis.com/v1beta` |
 | `GEMINI_DEFAULT_ACTION` | No | Default action appended to `models/{model}:<action>` when `path` not provided | `generateContent` |
-| `HUMANIZER_SCORE_MODE` | No | `mock` forces humanize scores to be random; set to `openai` to use real detection | `mock` |
-| `HUMANIZER_MOCK_SCORE_MIN` | No | Lower bound (inclusive) for the mock humanize score | `10` |
-| `HUMANIZER_MOCK_SCORE_MAX` | No | Upper bound (inclusive) for the mock humanize score | `30` |
+| `HUMANIZER_DETECT_MODEL` | No | Model used for `/humanizer/detect` (fine-tuned AI-score model) | `ft:gpt-4.1-nano-2025-04-14:bakery-scent-srl:ai-text-analyze-08-12-2025:CkUmccaE` |
+| `HUMANIZER_HUMANIZE_MODEL` | No | Model used for `/humanizer/humanize` (fine-tuned by default) | `ft:gpt-4.1-nano-2025-04-14:bakery-scent-srl:text-humanizer-08-12-2025:CkToTSkg` |
 | `DEVICECHECK_KEY_ID` | Yes | Apple key ID used to sign DeviceCheck auth tokens | — |
 | `DEVICECHECK_TEAM_ID` | Yes | Apple Developer Team ID (used as JWT issuer) | — |
 | `DEVICECHECK_PRIVATE_KEY` | Yes | Full text of the DeviceCheck `.p8` key (use literal newlines or `\n`) | — |
@@ -305,7 +304,7 @@ Same payload as `/detect`:
 }
 ```
 
-- Returns JSON with the rewritten `text` plus a fresh `score` (0-100) computed immediately after humanizing by re-running the detect prompt on the new text.
+- Returns JSON with the rewritten `text` plus a `score` (0-100). The service uses the fine-tuned humanizer model's returned `ai_score` if present; otherwise it falls back to the detect prompt for scoring.
 - While `HUMANIZER_SCORE_MODE=mock` (default) the `score` is a random integer between `HUMANIZER_MOCK_SCORE_MIN` and `HUMANIZER_MOCK_SCORE_MAX` (10-30) so the client can keep moving without waiting for reliable detect results. Set `HUMANIZER_SCORE_MODE=openai` to switch back to actual OpenAI scoring.
 
 #### Error responses
