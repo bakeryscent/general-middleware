@@ -304,7 +304,7 @@ Same payload as `/detect`:
 }
 ```
 
-- Returns JSON with the rewritten `text` plus a `score` (0-100). The service uses the fine-tuned humanizer model's returned `ai_score` if present; otherwise it falls back to the detect prompt for scoring.
+Returns JSON with the rewritten `text` plus a `score` (0-100). The service uses the fine-tuned humanizer model's returned `ai_score` if present; otherwise it falls back to the detect prompt. Any model-provided score is normalized to 0–100 (values ≤1 are scaled up, then clamped and rounded).
 - While `HUMANIZER_SCORE_MODE=mock` (default) the `score` is a random integer between `HUMANIZER_MOCK_SCORE_MIN` and `HUMANIZER_MOCK_SCORE_MAX` (10-30) so the client can keep moving without waiting for reliable detect results. Set `HUMANIZER_SCORE_MODE=openai` to switch back to actual OpenAI scoring.
 
 #### Error responses

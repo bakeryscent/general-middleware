@@ -297,6 +297,11 @@ const parseProbability = (
   };
 };
 
+const normalizeScore = (value: number): number => {
+  const scaled = value <= 1 ? value * 100 : value;
+  return Math.min(100, Math.max(0, Math.round(scaled)));
+};
+
 /**
  * Routes
  */
@@ -382,7 +387,7 @@ export const humanizerRoutes = new Elysia({ prefix: "/humanizer" })
       if (aiScoreFromModel !== undefined) {
         return {
           text: rewrittenText,
-          score: aiScoreFromModel,
+          score: normalizeScore(aiScoreFromModel),
         };
       }
 
