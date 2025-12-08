@@ -254,6 +254,12 @@ const callOpenAi = async (
       status: result.status,
     });
 
+    console.info("humanizer.openai.response", {
+      action,
+      length: textResult.length,
+      preview: textResult.slice(0, 400),
+    });
+
     return { value: textResult };
   } catch (error) {
     const mode = model === MODEL ? "FALLBACK" : "custom";
