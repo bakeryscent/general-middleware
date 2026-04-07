@@ -100,13 +100,23 @@ export const lyriaRoutes = new Elysia({ prefix: "/lyria" }).post(
             inlineData?: { mimeType: string; data: string };
           }>;
         };
+        finishReason?: string;
       }>;
+      promptFeedback?: {
+        blockReason?: string;
+        safetyRatings?: Array<{ category: string; probability: string }>;
+      };
     };
 
     const parts = result.candidates?.[0]?.content?.parts;
     if (!parts?.length) {
+      const finishReason = result.candidates?.[0]?.finishReason;
+      const blockReason = result.promptFeedback?.blockReason;
       throw jsonError(502, {
         message: "Lyria returned an empty response",
+        finishReason: finishReason || null,
+        blockReason: blockReason || null,
+        promptFeedback: result.promptFeedback || null,
       });
     }
 
