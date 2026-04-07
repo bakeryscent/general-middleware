@@ -39,7 +39,7 @@ export const createApp = () =>
       }
 
       try {
-        await validateDeviceCheckToken(token);
+        await validateDeviceCheckToken(token, request);
       } catch (error) {
         if (error instanceof DeviceCheckError) {
           const logDetails = typeof error.details === "string" ? error.details : JSON.stringify(error.details);

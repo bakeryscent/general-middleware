@@ -187,5 +187,30 @@ class DeviceCheckClient {
 
 export const deviceCheckClient = new DeviceCheckClient(env.deviceCheck);
 
-export const validateDeviceCheckToken = (deviceToken: string) =>
-  deviceCheckClient.validateToken(deviceToken);
+const isDeviceCheck2Configured = Boolean(
+  env.deviceCheck2.keyId && env.deviceCheck2.teamId && env.deviceCheck2.privateKey
+);
+
+export const deviceCheckClient2 = isDeviceCheck2Configured
+  ? new DeviceCheckClient(env.deviceCheck2)
+  : null;
+
+const APP_ID_HEADER = "x-app-id";
+
+export const resolveDeviceCheckClient = (request: Request): DeviceCheckClient => {
+  const appId = request.headers.get(APP_ID_HEADER)?.trim().toLowerCase();
+
+  if (appId && deviceCheckClient2) {
+    const secondaryApps = (Bun.env.DEVICECHECK_2_APP_IDS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (secondaryApps.includes(appId)) {
+      return deviceCheckClient2;
+    }
+  }
+
+  return deviceCheckClient;
+};
+
+export const validateDeviceCheckToken = (deviceToken: string, request?: Request) => {
+  const client = request ? resolveDeviceCheckClient(request) : deviceCheckClient;
+  return client.validateToken(deviceToken);
+};

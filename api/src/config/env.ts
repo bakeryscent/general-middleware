@@ -25,6 +25,18 @@ const readFileFromPath = (path: string | undefined): string | undefined => {
   }
 };
 
+const readFileFromPathOptional = (path: string | undefined): string | undefined => {
+  if (!path) {
+    return undefined;
+  }
+
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return undefined;
+  }
+};
+
 export const env = {
   port: toNumber(Bun.env.PORT, 3000),
   nodeEnv: Bun.env.NODE_ENV ?? "development",
@@ -46,6 +58,17 @@ export const env = {
       ? "https://api.devicecheck.apple.com/v1"
       : "https://api.development.devicecheck.apple.com/v1",
     timeoutMs: toNumber(Bun.env.DEVICECHECK_TIMEOUT_MS, 4000),
+  },
+  deviceCheck2: {
+    keyId: trimOrUndefined(Bun.env.DEVICECHECK_2_KEY_ID),
+    teamId: trimOrUndefined(Bun.env.DEVICECHECK_2_TEAM_ID),
+    privateKey:
+      trimOrUndefined(Bun.env.DEVICECHECK_2_PRIVATE_KEY) ??
+      readFileFromPathOptional(trimOrUndefined(Bun.env.DEVICECHECK_2_PRIVATE_KEY_FILE)),
+    baseUrl: (Bun.env.NODE_ENV ?? "development") === "production"
+      ? "https://api.devicecheck.apple.com/v1"
+      : "https://api.development.devicecheck.apple.com/v1",
+    timeoutMs: toNumber(Bun.env.DEVICECHECK_2_TIMEOUT_MS, 4000),
   },
   providers: {
     openai: {
@@ -82,5 +105,6 @@ export type OpenAiEnvConfig = ProviderConfigMap["openai"];
 export type ClaudeEnvConfig = ProviderConfigMap["claude"];
 export type GeminiEnvConfig = ProviderConfigMap["gemini"];
 export type DeviceCheckEnvConfig = typeof env.deviceCheck;
+export type DeviceCheck2EnvConfig = typeof env.deviceCheck2;
 export type AxiomEnvConfig = typeof env.axiom;
 export type HumanizerEnvConfig = typeof env.humanizer;

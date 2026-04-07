@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { providerRoutes } from "./providers";
 import { echoRequestSchema } from "./schemas";
 import { humanizerRoutes } from "./humanizer";
+import { lyriaRoutes } from "./lyria";
 
 export const apiRoutes = new Elysia({ prefix: "/api" })
   .get("/ping", () => ({ message: "pong" }))
@@ -16,4 +17,5 @@ export const apiRoutes = new Elysia({ prefix: "/api" })
     }
   )
   .use(humanizerRoutes)
-  .use(providerRoutes);
+  .use(providerRoutes)
+  .use(lyriaRoutes);
