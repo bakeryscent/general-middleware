@@ -70,7 +70,6 @@ export const lyriaRoutes = new Elysia({ prefix: "/lyria" }).post(
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         response_modalities: ["AUDIO", "TEXT"],
-        ...(useWav && { response_mime_type: "audio/wav" }),
       },
     };
 
