@@ -22,9 +22,9 @@ const normalizePrivateKey = (value: string) => value.replace(/\\n/g, "\n");
 const assertDeviceCheckConfig = (config: DeviceCheckEnvConfig) => {
   const missing: string[] = [];
 
-  if (!config.keyId) missing.push("DEVICECHECK_KEY_ID");
-  if (!config.teamId) missing.push("DEVICECHECK_TEAM_ID");
-  if (!config.privateKey) missing.push("DEVICECHECK_PRIVATE_KEY");
+  if (!config.keyId) missing.push(`${config.name}_KEY_ID`);
+  if (!config.teamId) missing.push(`${config.name}_TEAM_ID`);
+  if (!config.privateKey) missing.push(`${config.name}_PRIVATE_KEY`);
 
   if (missing.length) {
     throw new Error(`Missing DeviceCheck configuration variables: ${missing.join(", ")}`);
@@ -58,9 +58,11 @@ class DeviceCheckClient {
     assertDeviceCheckConfig(config);
     this.normalizedPrivateKey = normalizePrivateKey(config.privateKey!);
     console.info("DeviceCheck initialized", {
+      account: config.name,
       baseUrl: config.baseUrl,
       keyId: config.keyId,
       teamId: config.teamId,
+      appIds: config.appIds,
     });
   }
 
@@ -114,6 +116,7 @@ class DeviceCheckClient {
     const durationMs = Date.now() - startedAt;
 
     console.info("DeviceCheck.request", {
+      account: this.config.name,
       path: url,
       status: response.status,
       durationMs,
@@ -127,6 +130,7 @@ class DeviceCheckClient {
       const error = new DeviceCheckError("Missing DeviceCheck token", 401);
       recordSpanException(error, {
         "devicecheck.phase": "validation",
+        "devicecheck.account": this.config.name,
       });
       throw error;
     }
@@ -155,6 +159,7 @@ class DeviceCheckClient {
         );
         recordSpanException(deviceError, {
           "devicecheck.phase": "response",
+          "devicecheck.account": this.config.name,
           "devicecheck.status": response.status,
           "devicecheck.details": toAttributeString(details ?? "No response body"),
         });
@@ -169,6 +174,7 @@ class DeviceCheckClient {
         const timeoutError = new DeviceCheckError("DeviceCheck validation timed out", 504);
         recordSpanException(timeoutError, {
           "devicecheck.phase": "timeout",
+          "devicecheck.account": this.config.name,
         });
         throw timeoutError;
       }
@@ -176,6 +182,7 @@ class DeviceCheckClient {
       const requestError = new DeviceCheckError("DeviceCheck validation request failed", 503, error);
       recordSpanException(requestError, {
         "devicecheck.phase": "request",
+        "devicecheck.account": this.config.name,
         "devicecheck.details": toAttributeString(error instanceof Error ? error.message : error),
       });
       throw requestError;
@@ -185,32 +192,27 @@ class DeviceCheckClient {
   }
 }
 
-export const deviceCheckClient = new DeviceCheckClient(env.deviceCheck);
+const [primaryAccount, ...extraAccounts] = env.deviceCheckAccounts;
 
-const isDeviceCheck2Configured = Boolean(
-  env.deviceCheck2.keyId && env.deviceCheck2.teamId && env.deviceCheck2.privateKey
-);
+const primaryClient = new DeviceCheckClient(primaryAccount);
 
-export const deviceCheckClient2 = isDeviceCheck2Configured
-  ? new DeviceCheckClient(env.deviceCheck2)
-  : null;
+// One client per Apple team; each app id maps to the team that owns the app now.
+const clientsByAppId = new Map<string, DeviceCheckClient>();
+for (const account of extraAccounts) {
+  const client = new DeviceCheckClient(account);
+  for (const appId of account.appIds) {
+    clientsByAppId.set(appId, client);
+  }
+}
 
 const APP_ID_HEADER = "x-app-id";
 
 export const resolveDeviceCheckClient = (request: Request): DeviceCheckClient => {
   const appId = request.headers.get(APP_ID_HEADER)?.trim().toLowerCase();
-
-  if (appId && deviceCheckClient2) {
-    const secondaryApps = (Bun.env.DEVICECHECK_2_APP_IDS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-    if (secondaryApps.includes(appId)) {
-      return deviceCheckClient2;
-    }
-  }
-
-  return deviceCheckClient;
+  return (appId && clientsByAppId.get(appId)) || primaryClient;
 };
 
 export const validateDeviceCheckToken = (deviceToken: string, request?: Request) => {
-  const client = request ? resolveDeviceCheckClient(request) : deviceCheckClient;
+  const client = request ? resolveDeviceCheckClient(request) : primaryClient;
   return client.validateToken(deviceToken);
 };

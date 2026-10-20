@@ -25,16 +25,91 @@ const readFileFromPath = (path: string | undefined): string | undefined => {
   }
 };
 
-const readFileFromPathOptional = (path: string | undefined): string | undefined => {
-  if (!path) {
-    return undefined;
+const DEVICECHECK_BASE_URL = (Bun.env.NODE_ENV ?? "development") === "production"
+  ? "https://api.devicecheck.apple.com/v1"
+  : "https://api.development.devicecheck.apple.com/v1";
+
+// Highest numbered account read from the environment (DEVICECHECK_9_*).
+const DEVICECHECK_MAX_ACCOUNTS = 9;
+
+export type DeviceCheckEnvConfig = {
+  /** Env prefix this account was read from, e.g. "DEVICECHECK_3". */
+  name: string;
+  keyId?: string;
+  teamId?: string;
+  privateKey?: string;
+  baseUrl: string;
+  timeoutMs: number;
+  /** Lowercased `x-app-id` values routed to this account. Empty on the primary. */
+  appIds: string[];
+};
+
+const readDeviceCheckAccount = (prefix: string): DeviceCheckEnvConfig => {
+  const keyFile = trimOrUndefined(Bun.env[`${prefix}_PRIVATE_KEY_FILE`]);
+  return {
+    name: prefix,
+    keyId: trimOrUndefined(Bun.env[`${prefix}_KEY_ID`]),
+    teamId: trimOrUndefined(Bun.env[`${prefix}_TEAM_ID`]),
+    privateKey:
+      trimOrUndefined(Bun.env[`${prefix}_PRIVATE_KEY`]) ?? readFileFromPath(keyFile),
+    baseUrl: DEVICECHECK_BASE_URL,
+    timeoutMs: toNumber(Bun.env[`${prefix}_TIMEOUT_MS`], 4000),
+    appIds: (Bun.env[`${prefix}_APP_IDS`] ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  };
+};
+
+/**
+ * The primary account (DEVICECHECK_*) validates every app that no other account claims.
+ * DEVICECHECK_2_* … DEVICECHECK_9_* each serve the apps listed in their `_APP_IDS`
+ * (one per Apple team). An extra account is read when any of its variables is set,
+ * and then must be complete, or the server refuses to start: a half-configured team
+ * would otherwise silently fall back to the primary key and Apple would reject
+ * every token from that team's apps.
+ */
+const readDeviceCheckAccounts = (): [DeviceCheckEnvConfig, ...DeviceCheckEnvConfig[]] => {
+  const primary = readDeviceCheckAccount("DEVICECHECK");
+  if (primary.appIds.length) {
+    throw new Error("DEVICECHECK_APP_IDS is not supported: the primary account serves every unclaimed app");
   }
 
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
+  const accounts: [DeviceCheckEnvConfig, ...DeviceCheckEnvConfig[]] = [primary];
+  const claimedBy = new Map<string, string>();
+
+  for (let n = 2; n <= DEVICECHECK_MAX_ACCOUNTS; n++) {
+    const prefix = `DEVICECHECK_${n}`;
+    if (!Object.keys(Bun.env).some((key) => key.startsWith(`${prefix}_`) && trimOrUndefined(Bun.env[key]))) {
+      continue;
+    }
+
+    const account = readDeviceCheckAccount(prefix);
+    const missing = [
+      !account.keyId && `${prefix}_KEY_ID`,
+      !account.teamId && `${prefix}_TEAM_ID`,
+      !account.privateKey && `${prefix}_PRIVATE_KEY`,
+    ].filter(Boolean);
+    if (missing.length) {
+      throw new Error(`Incomplete DeviceCheck account ${prefix}, missing: ${missing.join(", ")}`);
+    }
+
+    if (!account.appIds.length) {
+      console.warn(`DeviceCheck account ${prefix} has no ${prefix}_APP_IDS, so no app is routed to it`);
+    }
+
+    for (const appId of account.appIds) {
+      const other = claimedBy.get(appId);
+      if (other) {
+        throw new Error(`App id ${appId} is listed in both ${other}_APP_IDS and ${prefix}_APP_IDS`);
+      }
+      claimedBy.set(appId, prefix);
+    }
+
+    accounts.push(account);
   }
+
+  return accounts;
 };
 
 export const env = {
@@ -48,28 +123,7 @@ export const env = {
     dataset: trimOrUndefined(Bun.env.AXIOM_DATASET),
     baseUrl: sanitizeUrl(Bun.env.AXIOM_BASE_URL, "https://api.axiom.co"),
   },
-  deviceCheck: {
-    keyId: trimOrUndefined(Bun.env.DEVICECHECK_KEY_ID),
-    teamId: trimOrUndefined(Bun.env.DEVICECHECK_TEAM_ID),
-    privateKey:
-      trimOrUndefined(Bun.env.DEVICECHECK_PRIVATE_KEY) ??
-      readFileFromPath(trimOrUndefined(Bun.env.DEVICECHECK_PRIVATE_KEY_FILE)),
-    baseUrl: (Bun.env.NODE_ENV ?? "development") === "production"
-      ? "https://api.devicecheck.apple.com/v1"
-      : "https://api.development.devicecheck.apple.com/v1",
-    timeoutMs: toNumber(Bun.env.DEVICECHECK_TIMEOUT_MS, 4000),
-  },
-  deviceCheck2: {
-    keyId: trimOrUndefined(Bun.env.DEVICECHECK_2_KEY_ID),
-    teamId: trimOrUndefined(Bun.env.DEVICECHECK_2_TEAM_ID),
-    privateKey:
-      trimOrUndefined(Bun.env.DEVICECHECK_2_PRIVATE_KEY) ??
-      readFileFromPathOptional(trimOrUndefined(Bun.env.DEVICECHECK_2_PRIVATE_KEY_FILE)),
-    baseUrl: (Bun.env.NODE_ENV ?? "development") === "production"
-      ? "https://api.devicecheck.apple.com/v1"
-      : "https://api.development.devicecheck.apple.com/v1",
-    timeoutMs: toNumber(Bun.env.DEVICECHECK_2_TIMEOUT_MS, 4000),
-  },
+  deviceCheckAccounts: readDeviceCheckAccounts(),
   providers: {
     openai: {
       apiKey: trimOrUndefined(Bun.env.OPENAI_API_KEY),
@@ -104,7 +158,5 @@ export type ProviderConfigMap = typeof env.providers;
 export type OpenAiEnvConfig = ProviderConfigMap["openai"];
 export type ClaudeEnvConfig = ProviderConfigMap["claude"];
 export type GeminiEnvConfig = ProviderConfigMap["gemini"];
-export type DeviceCheckEnvConfig = typeof env.deviceCheck;
-export type DeviceCheck2EnvConfig = typeof env.deviceCheck2;
 export type AxiomEnvConfig = typeof env.axiom;
 export type HumanizerEnvConfig = typeof env.humanizer;

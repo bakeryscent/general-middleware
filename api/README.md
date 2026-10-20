@@ -37,8 +37,22 @@ bun start                 # run once
 | `DEVICECHECK_TEAM_ID` | Yes | Apple Developer Team ID (used as JWT issuer) | — |
 | `DEVICECHECK_PRIVATE_KEY` | Yes | Full text of the DeviceCheck `.p8` key (use literal newlines or `\n`) | — |
 | `DEVICECHECK_PRIVATE_KEY_FILE` | Yes (alternative) | Absolute/relative path to the `.p8` key; contents override `DEVICECHECK_PRIVATE_KEY` | — |
-| `DEVICECHECK_BASE_URL` | No | Override DeviceCheck REST base URL (handy for sandbox proxies) | `https://api.devicecheck.apple.com/v1` |
 | `DEVICECHECK_TIMEOUT_MS` | No | Abort validation calls if Apple does not respond in time | `4000` |
+| `DEVICECHECK_<n>_KEY_ID` / `_TEAM_ID` / `_PRIVATE_KEY` (or `_PRIVATE_KEY_FILE`) / `_TIMEOUT_MS` | No | Extra Apple team, `n` from 2 to 9. Once any of its variables is set, key ID, team ID and key are all required or the server won't start | — |
+| `DEVICECHECK_<n>_APP_IDS` | No | Comma-separated `x-app-id` values validated with team `n` (each app id in one team only) | — |
+
+### Multiple Apple teams
+
+A DeviceCheck token can only be validated with a key from the team that owns the app. The primary `DEVICECHECK_*` account validates every app no other account claims; apps owned by other teams (for example after an App Store transfer) go in a numbered account:
+
+```bash
+DEVICECHECK_3_KEY_ID=BF3C8M729A
+DEVICECHECK_3_TEAM_ID=66A26KCF8K
+DEVICECHECK_3_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+DEVICECHECK_3_APP_IDS=com.midnight.rhymes
+```
+
+The app picks its account with the `x-app-id` header (case-insensitive). A wrong team shows up in Apple's reply as `400 Missing or badly formatted authorization token`; each rejection is logged with `devicecheck.account`.
 
 ## DeviceCheck enforcement
 
