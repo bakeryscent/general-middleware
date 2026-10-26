@@ -20,10 +20,12 @@ type LyriaRequestBody = {
 // Full-length beats go to Lyria 3.5 (Interactions API). If that call fails
 // for any reason the route falls back to Lyria 3 Pro (generateContent), so a
 // problem with the new model never takes beat generation down.
-const LYRIA_35_MODEL = "lyria-3.5";
+const LYRIA_35_MODEL = env.providers.gemini.lyriaModel;
 
 const selectModel = (duration: number) =>
-  duration <= 30 ? "lyria-3-clip-preview" : "lyria-3-pro-preview";
+  duration <= 30
+    ? env.providers.gemini.lyriaClipModel
+    : env.providers.gemini.lyriaFallbackModel;
 
 // Production notes per genre: tempo, drums and sound palette. Vague prompts
 // give generic results, so each genre gets the details a producer would use.

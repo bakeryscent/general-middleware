@@ -31,6 +31,9 @@ bun start                 # run once
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Yes (for `/api/gemini`) | API key appended as `?key=` when calling Gemini | — |
 | `GEMINI_BASE_URL` | No | Override for Gemini REST base URL | `https://generativelanguage.googleapis.com/v1beta` |
 | `GEMINI_DEFAULT_ACTION` | No | Default action appended to `models/{model}:<action>` when `path` not provided | `generateContent` |
+| `LYRIA_MODEL` | No | Model for `/api/lyria/generate` beats longer than 30 s (Interactions API) | `lyria-3.5` |
+| `LYRIA_FALLBACK_MODEL` | No | Model used (generateContent) when the one above fails | `lyria-3-pro-preview` |
+| `LYRIA_CLIP_MODEL` | No | Model for 30-second beats | `lyria-3-clip-preview` |
 | `HUMANIZER_DETECT_MODEL` | No | Model used for `/humanizer/detect` (fine-tuned AI-score model) | `ft:gpt-4.1-nano-2025-04-14:bakery-scent-srl:ai-text-analyze-08-12-2025:CkUmccaE` |
 | `HUMANIZER_HUMANIZE_MODEL` | No | Model used for `/humanizer/humanize` (fine-tuned by default) | `ft:gpt-4.1-nano-2025-04-14:bakery-scent-srl:text-humanizer-08-12-2025:CkToTSkg` |
 | `DEVICECHECK_KEY_ID` | Yes | Apple key ID used to sign DeviceCheck auth tokens | — |

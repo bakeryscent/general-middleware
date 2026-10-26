@@ -140,6 +140,13 @@ export const env = {
       apiKey: trimOrUndefined(Bun.env.GEMINI_API_KEY ?? Bun.env.GOOGLE_API_KEY),
       baseUrl: sanitizeUrl(Bun.env.GEMINI_BASE_URL, "https://generativelanguage.googleapis.com/v1beta"),
       defaultAction: trimOrUndefined(Bun.env.GEMINI_DEFAULT_ACTION) ?? "generateContent",
+      // beats (/api/lyria): the full-length model (Interactions API), the one
+      // it falls back to (generateContent) and the 30-second clip one;
+      // overridable from the environment, so a version can be swapped
+      // without a deploy
+      lyriaModel: trimOrUndefined(Bun.env.LYRIA_MODEL) ?? "lyria-3.5",
+      lyriaFallbackModel: trimOrUndefined(Bun.env.LYRIA_FALLBACK_MODEL) ?? "lyria-3-pro-preview",
+      lyriaClipModel: trimOrUndefined(Bun.env.LYRIA_CLIP_MODEL) ?? "lyria-3-clip-preview",
     },
   },
   humanizer: {
