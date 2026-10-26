@@ -43,7 +43,6 @@ const genreStyles: Record<string, string> = {
   edm: "128 BPM EDM, big supersaw leads, four-on-the-floor kick, build-ups and drops",
   "electronic dance": "126 BPM electronic dance, driving kick, rolling bass, shimmering synths",
   electronic: "120 BPM electronic, layered synths, tight programmed drums",
-  clectronic: "120 BPM electronic, layered synths, tight programmed drums",
   house: "124 BPM house, four-on-the-floor kick, offbeat hats, piano stabs, groovy bass",
   "tropical house": "110 BPM tropical house, marimba and pluck melodies, relaxed four-on-the-floor",
   "uk garage": "132 BPM UK garage, shuffled 2-step drums, chopped organ stabs, warm sub bass",
@@ -59,17 +58,23 @@ const genreStyles: Record<string, string> = {
   world: "100 BPM world fusion, traditional percussion, organic instruments",
 };
 
+// The app's Electronic genre is spelled "clectronic" (a typo in its raw
+// value, sent by every version out there): said right in the prompt here.
+const genreName = (genre: string) =>
+  genre.toLowerCase() === "clectronic" ? "electronic" : genre;
+
 const buildPrompt = (body: LyriaRequestBody): string => {
   const parts: string[] = [];
 
   const instrumental = body.instrumental !== false;
+  const genres = body.genres.map(genreName);
   const seconds = body.duration > 30 ? body.duration : 30;
 
   parts.push(
-    `Create a ${seconds}-second ${instrumental ? "instrumental " : ""}${body.genres.join(", ")} beat for a rapper or singer to write and perform over.`
+    `Create a ${seconds}-second ${instrumental ? "instrumental " : ""}${genres.join(", ")} beat for a rapper or singer to write and perform over.`
   );
 
-  const styles = body.genres
+  const styles = genres
     .map((genre) => genreStyles[genre.toLowerCase()])
     .filter(Boolean);
   if (styles.length) {
