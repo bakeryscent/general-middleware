@@ -58,8 +58,9 @@ const genreStyles: Record<string, string> = {
   world: "100 BPM world fusion, traditional percussion, organic instruments",
 };
 
-// The app's Electronic genre is spelled "clectronic" (a typo in its raw
-// value, sent by every version out there): said right in the prompt here.
+// App versions before 2026-10-26 send their Electronic genre as
+// "clectronic" (a typo in the raw value, fixed since): said right here, so
+// those versions keep getting the right beat.
 const genreName = (genre: string) =>
   genre.toLowerCase() === "clectronic" ? "electronic" : genre;
 
